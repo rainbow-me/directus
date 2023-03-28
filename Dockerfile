@@ -28,6 +28,10 @@ RUN cd pruned \
 	&& rm -r *.tgz package \
 	&& mkdir database extensions uploads
 
+# Certs needed to verify RDS endpoints
+RUN apk update && apk add ca-certificates
+RUN wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -P /usr/local/share/ca-certificates -O /usr/local/share/ca-certificates/aws-rds-global-bundle.crt && update-ca-certificates
+
 ####################################################################################################
 ## Create Production Image
 
@@ -45,6 +49,7 @@ ENV NODE_ENV="production"
 ENV NPM_CONFIG_UPDATE_NOTIFIER="false"
 
 COPY --from=pruned --chown=node:node /workspace/pruned .
+COPY --from=pruned /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 VOLUME /directus/database
 VOLUME /directus/extensions

@@ -11,6 +11,8 @@ import type { DatabaseClient } from '../types';
 import { getConfigFromEnv } from '../utils/get-config-from-env';
 import { validateEnv } from '../utils/validate-env';
 import { getHelpers } from './helpers';
+import { Signer } from '@aws-sdk/rds-signer';
+import fs from "fs";
 
 let database: Knex | null = null;
 let inspector: ReturnType<typeof SchemaInspector> | null = null;
@@ -68,7 +70,32 @@ export default function getDatabase(): Knex {
 		client,
 		version,
 		searchPath,
-		connection: connectionString || connectionConfig,
+		// HACK: Support IAM RDS authentication for Postgres
+		// This is the only reason we forked directus
+		connection: async () => {
+			const signer = new Signer({
+				hostname: connectionConfig['host'] as string,
+				port: parseInt(connectionConfig['port'] as string, 10),
+				username: connectionConfig['user'] as string,
+				region: connectionConfig['region'] as string,
+			});
+
+			const token = await signer.getAuthToken();
+			const tokenExpiration = Date.now() + 10 * 60 * 1000;
+
+			const dbConfig = {
+				...connectionConfig,
+				password: token,
+				ssl: {
+					ca: fs.readFileSync('/etc/ssl/certs/ca-certificates.crt').toString(),
+				},
+				expirationChecker: () => {
+					return tokenExpiration <= Date.now();
+				},
+			};
+
+			return dbConfig;
+		},
 		log: {
 			warn: (msg) => {
 				// Ignore warnings about returning not being supported in some DBs
@@ -86,6 +113,8 @@ export default function getDatabase(): Knex {
 		},
 		pool: poolConfig,
 	};
+
+	logger.info(`Using following db config: ${JSON.stringify(knexConfig)}`);
 
 	if (client === 'sqlite3') {
 		knexConfig.useNullAsDefault = true;
