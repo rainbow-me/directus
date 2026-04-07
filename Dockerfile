@@ -11,6 +11,7 @@ RUN corepack enable && corepack prepare pnpm@7.30.0 --activate
 RUN pnpm fetch
 COPY . .
 RUN pnpm install --recursive --offline --frozen-lockfile
+RUN pnpm update openid-client@5.6.5 --recursive
 
 ####################################################################################################
 ## Create Deployment
